@@ -40,7 +40,7 @@
 │       │                    # Barcode, PrintSheet, ErrorBoundary
 │       ├── hooks/           # useCatalog (cache-first + فهرسة بحث), useCart
 │       └── lib/             # api, scanner, excel, format, sound, theme
-├── server.js                # تشغيل الـ API محليًا أثناء التطوير
+├── scripts/dev-server.js    # تشغيل الـ API محليًا أثناء التطوير
 ├── vercel.json              # إعدادات البناء والتوجيه على Vercel
 └── .env.example
 ```
@@ -74,6 +74,7 @@ npm run build
 
 1. **أنشئ قاعدة البيانات**: من لوحة Vercel → **Storage** → **Create Database** → اختر **Postgres (Neon)**. أو أنشئ قاعدة مجانية من [neon.tech](https://neon.tech) وانسخ الـ connection string.
 2. **اربط المشروع**: من [vercel.com/new](https://vercel.com/new) استورد هذا الريبو من GitHub. إعدادات البناء تُقرأ تلقائيًا من `vercel.json` — لا تغيّر شيئًا.
+   > ⚠️ لو ظهر **Framework Preset: Express** في شاشة الاستيراد، غيّره إلى **Other**. وجود `express` في dependencies يخدع الاكتشاف التلقائي فيحاول Vercel نشر المشروع كسيرفر واحد بدل (فرونت ثابت + API functions). ملف `vercel.json` يفرض `"framework": null` لمنع ذلك، لكن تأكيدها في الواجهة أيضًا لا يضر.
 3. **أضف متغير البيئة**: في إعدادات المشروع → **Environment Variables** أضف:
    - `DATABASE_URL` = connection string بتاع Postgres (لو أنشأتها من لوحة Vercel بيتضاف لوحده باسم قد يكون `POSTGRES_URL` — انسخ قيمته إلى `DATABASE_URL`).
 4. **Deploy**. أول طلب للـ API بينشئ الجداول ويزرع الكتالوج الأصلي (1399 صنف) تلقائيًا.
