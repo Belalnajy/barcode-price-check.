@@ -7,19 +7,24 @@
 const SEED = require('../_data/catalog.json');
 
 const VAT = 0.15;
+const CHUNK = 500;
 
 function round2(n) {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.round((v + Number.EPSILON) * 100) / 100;
 }
 
-/** Normalize one product row into the API shape. */
+/** Normalize one row — from the DB or the seed file — into the API shape. */
 function shape(row) {
-  const price = row.price === null || row.price === undefined ? null : Number(row.price);
+  const raw = row.price;
+  const price = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+  const valid = price !== null && Number.isFinite(price);
   return {
     name: row.name || '',
     barcode: String(row.barcode).trim(),
-    price: price === null ? null : round2(price),
-    priceWithVat: price === null ? null : round2(price * (1 + VAT)),
+    price: valid ? round2(price) : null,
+    priceWithVat: valid ? round2(price * (1 + VAT)) : null,
     note: row.note || null,
   };
 }
@@ -36,12 +41,58 @@ function getPool() {
     const connectionString = process.env.DATABASE_URL;
     pool = new Pool({
       connectionString,
+      // Serverless invocations are short-lived and concurrent; a small pool
+      // that retires idle clients quickly avoids exhausting the DB's slots.
       max: 3,
-      // Managed Postgres providers (Neon, Vercel Postgres, Supabase) require TLS.
-      ssl: /localhost|127\.0\.0\.1/.test(connectionString) ? false : { rejectUnauthorized: false },
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 8000,
+      // Managed Postgres providers (Neon, Vercel, Supabase) require TLS.
+      ssl: /localhost|127\.0\.0\.1/.test(connectionString || '')
+        ? false
+        : { rejectUnauthorized: false },
     });
+    // Without this an idle-client error crashes the function process.
+    pool.on('error', (err) => console.error('[db] idle client error', err.message));
   }
   return pool;
+}
+
+/** Run `fn` inside a transaction, rolling back on any throw. */
+async function transaction(fn) {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/** Bulk upsert via UNNEST — one round trip per 500 rows instead of per row. */
+async function writeItems(client, items) {
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const part = items.slice(i, i + CHUNK);
+    await client.query(
+      `INSERT INTO products (barcode, name, price, note, updated_at)
+       SELECT *, now() FROM UNNEST ($1::text[], $2::text[], $3::numeric[], $4::text[])
+       ON CONFLICT (barcode) DO UPDATE
+         SET name = EXCLUDED.name,
+             price = EXCLUDED.price,
+             note = EXCLUDED.note,
+             updated_at = now()`,
+      [
+        part.map((p) => p.barcode),
+        part.map((p) => p.name || ''),
+        part.map((p) => (p.price === null || p.price === undefined ? null : p.price)),
+        part.map((p) => p.note || null),
+      ]
+    );
+  }
 }
 
 async function initPg() {
@@ -62,43 +113,31 @@ async function initPg() {
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  /* Name lookups are served from the client's local index, but keep an index
+     for admin queries and to make ORDER BY name cheap on a cold cache. */
+  await db.query('CREATE INDEX IF NOT EXISTS products_name_idx ON products (name)');
+  await db.query('INSERT INTO catalog_meta (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+
   const { rows } = await db.query('SELECT COUNT(*)::int AS c FROM products');
   if (rows[0].c === 0) {
-    await seedPg(db);
+    await transaction(async (client) => {
+      await writeItems(client, SEED.map(shape));
+      await client.query(
+        `UPDATE catalog_meta SET is_original = true, updated_at = now() WHERE id = 1`
+      );
+    });
   }
-  await db.query(
-    `INSERT INTO catalog_meta (id) VALUES (1) ON CONFLICT (id) DO NOTHING`
-  );
-}
-
-async function seedPg(db) {
-  // Bulk insert the seed catalog in chunks using UNNEST.
-  const chunk = 500;
-  for (let i = 0; i < SEED.length; i += chunk) {
-    const part = SEED.slice(i, i + chunk);
-    await db.query(
-      `INSERT INTO products (barcode, name, price, note)
-       SELECT * FROM UNNEST ($1::text[], $2::text[], $3::numeric[], $4::text[])
-       ON CONFLICT (barcode) DO NOTHING`,
-      [
-        part.map((p) => String(p.barcode).trim()),
-        part.map((p) => p.name || ''),
-        part.map((p) => (p.price === null || p.price === undefined ? null : p.price)),
-        part.map((p) => p.note || null),
-      ]
-    );
-  }
-  await db.query(
-    `INSERT INTO catalog_meta (id, is_original, updated_at) VALUES (1, true, now())
-     ON CONFLICT (id) DO UPDATE SET is_original = true, updated_at = now()`
-  );
 }
 
 const pgStore = {
   kind: 'postgres',
 
   async init() {
-    if (!initPromise) initPromise = initPg().catch((e) => { initPromise = null; throw e; });
+    // Cache the promise so concurrent requests share one bootstrap, but drop
+    // it on failure so the next request retries instead of failing forever.
+    if (!initPromise) {
+      initPromise = initPg().catch((e) => { initPromise = null; throw e; });
+    }
     return initPromise;
   },
 
@@ -108,12 +147,13 @@ const pgStore = {
       db.query('SELECT barcode, name, price, note FROM products ORDER BY name, barcode'),
       db.query('SELECT is_original, updated_at FROM catalog_meta WHERE id = 1'),
     ]);
+    const row = meta.rows[0];
     return {
       items: items.rows.map(shape),
       meta: {
         count: items.rows.length,
-        isOriginal: meta.rows[0] ? meta.rows[0].is_original : true,
-        updatedAt: meta.rows[0] ? meta.rows[0].updated_at : null,
+        isOriginal: row ? row.is_original : true,
+        updatedAt: row ? row.updated_at : null,
       },
     };
   },
@@ -127,87 +167,73 @@ const pgStore = {
   },
 
   async upsert(item) {
-    const db = getPool();
-    const { rows } = await db.query(
-      `INSERT INTO products (barcode, name, price, note, updated_at)
-       VALUES ($1, $2, $3, $4, now())
-       ON CONFLICT (barcode) DO UPDATE
-         SET name = EXCLUDED.name, price = EXCLUDED.price, note = EXCLUDED.note, updated_at = now()
-       RETURNING (xmax = 0) AS inserted, barcode, name, price, note`,
-      [item.barcode, item.name, item.price, item.note || null]
-    );
-    await touchMeta(db);
-    return { product: shape(rows[0]), created: rows[0].inserted };
+    const row = await transaction(async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO products (barcode, name, price, note, updated_at)
+         VALUES ($1, $2, $3, $4, now())
+         ON CONFLICT (barcode) DO UPDATE
+           SET name = EXCLUDED.name,
+               price = EXCLUDED.price,
+               note = EXCLUDED.note,
+               updated_at = now()
+         RETURNING (xmax = 0) AS inserted, barcode, name, price, note`,
+        [item.barcode, item.name, item.price, item.note || null]
+      );
+      await client.query(
+        'UPDATE catalog_meta SET is_original = false, updated_at = now() WHERE id = 1'
+      );
+      return rows[0];
+    });
+    return { product: shape(row), created: row.inserted };
+  },
+
+  async remove(barcode) {
+    const removed = await transaction(async (client) => {
+      const { rowCount } = await client.query('DELETE FROM products WHERE barcode = $1', [barcode]);
+      if (rowCount) {
+        await client.query(
+          'UPDATE catalog_meta SET is_original = false, updated_at = now() WHERE id = 1'
+        );
+      }
+      return rowCount > 0;
+    });
+    return removed;
   },
 
   async bulk(items, mode) {
-    const db = getPool();
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
-      if (mode === 'replace') {
-        await client.query('DELETE FROM products');
-      }
-      const chunk = 500;
-      for (let i = 0; i < items.length; i += chunk) {
-        const part = items.slice(i, i + chunk);
-        await client.query(
-          `INSERT INTO products (barcode, name, price, note, updated_at)
-           SELECT *, now() FROM UNNEST ($1::text[], $2::text[], $3::numeric[], $4::text[])
-           ON CONFLICT (barcode) DO UPDATE
-             SET name = EXCLUDED.name, price = EXCLUDED.price, note = EXCLUDED.note, updated_at = now()`,
-          [
-            part.map((p) => p.barcode),
-            part.map((p) => p.name),
-            part.map((p) => p.price),
-            part.map((p) => p.note || null),
-          ]
-        );
-      }
+    await transaction(async (client) => {
+      if (mode === 'replace') await client.query('DELETE FROM products');
+      await writeItems(client, items);
       await client.query(
-        `UPDATE catalog_meta SET is_original = false, updated_at = now() WHERE id = 1`
+        'UPDATE catalog_meta SET is_original = false, updated_at = now() WHERE id = 1'
       );
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
+    });
     return this.list();
   },
 
   async reset() {
-    const db = getPool();
-    const client = await db.connect();
-    try {
-      await client.query('BEGIN');
+    // Wipe and re-seed atomically — a failure mid-way must not leave the shop
+    // with an empty price list.
+    await transaction(async (client) => {
       await client.query('DELETE FROM products');
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
-    await seedPg(db);
+      await writeItems(client, SEED.map(shape));
+      await client.query(
+        'UPDATE catalog_meta SET is_original = true, updated_at = now() WHERE id = 1'
+      );
+    });
     return this.list();
   },
 };
 
-async function touchMeta(db) {
-  await db.query(`UPDATE catalog_meta SET is_original = false, updated_at = now() WHERE id = 1`);
-}
-
 /* ---------------------------------------------------------------- *
  *  In-memory fallback (local dev without DATABASE_URL)
- *  NOT persistent across serverless cold starts — meant for dev only.
+ *  NOT persistent across serverless cold starts — dev only.
  * ---------------------------------------------------------------- */
 function seedMap() {
   const map = new Map();
   for (const p of SEED) {
-    const bc = String(p.barcode || '').trim();
-    if (bc && !map.has(bc)) map.set(bc, shape(p));
+    const barcode = String(p.barcode || '').trim();
+    if (barcode && !map.has(barcode)) map.set(barcode, shape(p));
   }
   return map;
 }
@@ -216,26 +242,45 @@ const memState = { map: seedMap(), isOriginal: true, updatedAt: null };
 
 const memStore = {
   kind: 'memory',
+
   async init() {},
+
   async list() {
-    const items = Array.from(memState.map.values()).sort((a, b) =>
-      a.name.localeCompare(b.name, 'ar') || a.barcode.localeCompare(b.barcode)
+    const items = Array.from(memState.map.values()).sort(
+      (a, b) => a.name.localeCompare(b.name, 'ar') || a.barcode.localeCompare(b.barcode)
     );
     return {
       items,
-      meta: { count: items.length, isOriginal: memState.isOriginal, updatedAt: memState.updatedAt },
+      meta: {
+        count: items.length,
+        isOriginal: memState.isOriginal,
+        updatedAt: memState.updatedAt,
+      },
     };
   },
+
   async get(barcode) {
     return memState.map.get(barcode) || null;
   },
+
   async upsert(item) {
     const created = !memState.map.has(item.barcode);
-    memState.map.set(item.barcode, shape(item));
+    const product = shape(item);
+    memState.map.set(item.barcode, product);
     memState.isOriginal = false;
     memState.updatedAt = new Date().toISOString();
-    return { product: memState.map.get(item.barcode), created };
+    return { product, created };
   },
+
+  async remove(barcode) {
+    const removed = memState.map.delete(barcode);
+    if (removed) {
+      memState.isOriginal = false;
+      memState.updatedAt = new Date().toISOString();
+    }
+    return removed;
+  },
+
   async bulk(items, mode) {
     if (mode === 'replace') memState.map = new Map();
     for (const p of items) memState.map.set(p.barcode, shape(p));
@@ -243,6 +288,7 @@ const memStore = {
     memState.updatedAt = new Date().toISOString();
     return this.list();
   },
+
   async reset() {
     memState.map = seedMap();
     memState.isOriginal = true;

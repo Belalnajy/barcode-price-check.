@@ -5,10 +5,25 @@
 const express = require('express');
 const { store, round2 } = require('./_lib/db');
 
-const app = express();
-app.use(express.json({ limit: '4mb' }));
+const MAX_BULK_ITEMS = 20000;
 
-/* Ensure the database schema exists + is seeded before handling any request. */
+const app = express();
+app.disable('x-powered-by');
+app.set('etag', 'strong');
+app.use(express.json({ limit: '8mb' }));
+
+/* Baseline hardening. The API serves same-origin JSON only — no cookies, no
+   credentials — so this is deliberately short rather than a helmet dependency. */
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'same-origin',
+    'X-Frame-Options': 'DENY',
+  });
+  next();
+});
+
+/* Ensure the schema exists and is seeded before handling any request. */
 app.use((req, res, next) => {
   Promise.resolve(store.init()).then(() => next(), next);
 });
@@ -17,34 +32,46 @@ const router = express.Router();
 
 /* ------------------------- validation helpers ------------------------- */
 function cleanBarcode(v) {
-  const s = String(v == null ? '' : v).trim();
+  const s = String(v === null || v === undefined ? '' : v).trim();
   return /^[0-9]{4,32}$/.test(s) ? s : null;
 }
 
+/**
+ * Coerce an untrusted product payload into a storable row.
+ * @returns {object|null} null when the row can't be salvaged.
+ */
 function cleanItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
+
   const barcode = cleanBarcode(raw.barcode);
   if (!barcode) return null;
-  const name = String(raw.name == null ? '' : raw.name).trim();
+
+  const name = String(raw.name === null || raw.name === undefined ? '' : raw.name).trim().slice(0, 300);
+
   let price = raw.price;
   if (price === '' || price === undefined) price = null;
   if (price !== null) {
     price = Number(price);
-    if (!Number.isFinite(price) || price < 0) return null;
+    if (!Number.isFinite(price) || price < 0 || price > 9999999999) return null;
     price = round2(price);
   }
-  const note = raw.note == null || String(raw.note).trim() === '' ? null : String(raw.note).trim();
-  return { barcode, name, price, note };
+
+  const noteText = raw.note === null || raw.note === undefined ? '' : String(raw.note).trim();
+
+  return { barcode, name, price, note: noteText ? noteText.slice(0, 300) : null };
 }
 
 /* ------------------------------ routes ------------------------------ */
-router.get('/health', async (req, res) => {
+router.get('/health', (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.json({ ok: true, db: store.kind });
 });
 
-/* Full catalog + meta */
+/* Full catalog + meta. Revalidated on every load, but the ETag means an
+   unchanged catalog costs a 304 instead of ~140 KB. */
 router.get('/products', async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'no-cache');
     res.json(await store.list());
   } catch (e) { next(e); }
 });
@@ -54,10 +81,13 @@ router.get('/products/:barcode', async (req, res, next) => {
   try {
     const barcode = cleanBarcode(req.params.barcode);
     if (!barcode) return res.status(400).json({ error: 'invalid_barcode' });
+
     const product = await store.get(barcode);
     if (!product) return res.status(404).json({ error: 'not_found', barcode });
-    res.json(product);
-  } catch (e) { next(e); }
+
+    res.set('Cache-Control', 'no-cache');
+    return res.json(product);
+  } catch (e) { return next(e); }
 });
 
 /* Add / update a single product (manual add form) */
@@ -66,30 +96,47 @@ router.post('/products', async (req, res, next) => {
     const item = cleanItem(req.body);
     if (!item) return res.status(400).json({ error: 'invalid_item' });
     if (!item.name) return res.status(400).json({ error: 'name_required' });
+
     const result = await store.upsert(item);
-    res.status(result.created ? 201 : 200).json(result);
-  } catch (e) { next(e); }
+    return res.status(result.created ? 201 : 200).json(result);
+  } catch (e) { return next(e); }
 });
 
-/* Bulk import from Excel (parsed client-side): { mode: 'merge'|'replace', items: [...] } */
+/* Remove a single product from the catalog */
+router.delete('/products/:barcode', async (req, res, next) => {
+  try {
+    const barcode = cleanBarcode(req.params.barcode);
+    if (!barcode) return res.status(400).json({ error: 'invalid_barcode' });
+
+    const removed = await store.remove(barcode);
+    if (!removed) return res.status(404).json({ error: 'not_found', barcode });
+
+    return res.json({ deleted: true, barcode });
+  } catch (e) { return next(e); }
+});
+
+/* Bulk import from a client-parsed sheet: { mode:'merge'|'replace', items:[...] } */
 router.post('/products/bulk', async (req, res, next) => {
   try {
-    const mode = req.body && req.body.mode === 'replace' ? 'replace' : 'merge';
-    const raw = req.body && Array.isArray(req.body.items) ? req.body.items : null;
-    if (!raw || !raw.length) return res.status(400).json({ error: 'no_items' });
-    if (raw.length > 20000) return res.status(400).json({ error: 'too_many_items' });
+    const body = req.body || {};
+    const mode = body.mode === 'replace' ? 'replace' : 'merge';
+    const raw = Array.isArray(body.items) ? body.items : null;
 
-    // Validate + de-duplicate by barcode (last row wins, same as the original app)
-    const map = new Map();
-    for (const r of raw) {
-      const item = cleanItem(r);
-      if (item) map.set(item.barcode, item);
+    if (!raw || !raw.length) return res.status(400).json({ error: 'no_items' });
+    if (raw.length > MAX_BULK_ITEMS) return res.status(400).json({ error: 'too_many_items' });
+
+    // Validate and de-duplicate by barcode (last row wins, as the sheet reads).
+    const byBarcode = new Map();
+    for (const row of raw) {
+      const item = cleanItem(row);
+      if (item) byBarcode.set(item.barcode, item);
     }
-    const items = Array.from(map.values());
+    const items = Array.from(byBarcode.values());
     if (!items.length) return res.status(400).json({ error: 'no_valid_items' });
 
-    res.json(await store.bulk(items, mode));
-  } catch (e) { next(e); }
+    const state = await store.bulk(items, mode);
+    return res.json({ ...state, imported: items.length, skipped: raw.length - items.length });
+  } catch (e) { return next(e); }
 });
 
 /* Reset the catalog back to the original seed list */
@@ -99,17 +146,32 @@ router.post('/products/reset', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-/* Mount with and without the /api prefix so the app works both behind
-   Vercel's rewrite (original URL preserved) and when run directly. */
+/* Mounted twice so the same app works behind Vercel's rewrite (which keeps
+   the original /api/... URL) and when run directly by server.js. */
 app.use('/api', router);
 app.use('/', router);
 
 /* 404 + error handling */
 app.use((req, res) => res.status(404).json({ error: 'route_not_found' }));
-app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+
+// eslint-disable-next-line no-unused-vars -- Express identifies handlers by arity
+app.use((err, req, res, next) => {
+  const status = Number(err && (err.status || err.statusCode)) || 0;
+
+  /* Malformed or oversized JSON is the caller's mistake, not a server fault —
+     body-parser marks these with a 4xx status, so pass it straight through. */
+  if (status >= 400 && status < 500) {
+    return res.status(status).json({
+      error: err.type === 'entity.too.large' ? 'payload_too_large' : 'invalid_json',
+    });
+  }
+
   console.error('[api]', err);
-  const dbDown = err && /ECONNREFUSED|ENOTFOUND|password|SSL|timeout/i.test(String(err.message));
-  res.status(dbDown ? 503 : 500).json({ error: dbDown ? 'database_unavailable' : 'internal_error' });
+  const message = String((err && err.message) || '');
+  const dbDown = /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|password|SSL|timeout|too many connections/i
+    .test(message);
+  return res.status(dbDown ? 503 : 500)
+    .json({ error: dbDown ? 'database_unavailable' : 'internal_error' });
 });
 
 module.exports = app;

@@ -1,13 +1,20 @@
 {
   "name": "barcode-price-check",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "استعلام الأسعار — Barcode price check (React + Express serverless + Postgres, Vercel-ready)",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "node server.js",
     "dev:web": "npm --prefix frontend run dev",
-    "build": "npm --prefix frontend run build"
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "test": "npm --prefix frontend run test",
+    "test:watch": "npm --prefix frontend run test:watch",
+    "install:all": "npm install && npm --prefix frontend install"
   },
   "dependencies": {
     "express": "^4.19.2",

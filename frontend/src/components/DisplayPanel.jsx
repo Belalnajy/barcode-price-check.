@@ -1,57 +1,68 @@
+import { memo } from 'react';
 import Barcode from './Barcode';
-import { money, withVat } from '../lib/format';
+import { hasPrice, money, withVat } from '../lib/format';
 
 /**
- * The big dark "customer display": idle, product hit / no-price warn, or miss.
+ * The customer-facing display: the one thing readable from across a counter.
  * shown: {type:'idle'} | {type:'product', p} | {type:'miss', code}
  */
-export default function DisplayPanel({ shown, t }) {
-  if (!shown || shown.type === 'idle') {
-    return (
-      <div className="display" id="disp">
-        <div className="idle">
-          <div className="big"><span className="dot" />{t.idle}</div>
-          <div className="sub">{t.idleSub}</div>
-        </div>
-      </div>
-    );
-  }
+function DisplayPanel({ shown, t }) {
+  const type = shown ? shown.type : 'idle';
+  const product = type === 'product' ? shown.p : null;
+  const priced = product ? hasPrice(product) : false;
+  const tone = type === 'miss' ? 'miss' : product ? (priced ? 'hit' : 'warn') : 'idle';
 
-  if (shown.type === 'miss') {
-    return (
-      <div className="display is-miss" id="disp">
-        <div className="d-state bad">{t.notFound}</div>
-        <p className="d-name d-miss-sub">{t.notFoundSub(shown.code)}</p>
-      </div>
-    );
-  }
-
-  const p = shown.p;
-  const none = p.price === null || p.price === undefined;
   return (
-    <div className={`display ${none ? 'is-warn' : 'is-hit'}`} id="disp">
-      <p className="d-name">{p.name}</p>
-      {p.note ? <span className="d-note">{p.note}</span> : null}
-      {none ? (
-        <>
-          <div className="d-state warn">{t.noPrice}</div>
-          <div className="d-sub">{t.noPriceSub}</div>
-        </>
-      ) : (
-        <>
-          <div className="d-price">
-            <span className="v n">{money(withVat(p.price))}</span>
-            <span className="cur">{t.inclVat}</span>
-          </div>
-          <div className="d-sub">
-            {t.beforeVatShort} <span className="n">{money(p.price)}</span> {t.cur}
-          </div>
-        </>
+    <section className={`display is-${tone}`} aria-live="polite" aria-atomic="true">
+      <span className="display-rail" aria-hidden="true" />
+
+      {type === 'idle' && (
+        <div className="display-idle">
+          <span className="pulse" aria-hidden="true" />
+          <p className="display-idle-title">{t.idle}</p>
+          <p className="display-idle-sub">{t.idleSub}</p>
+        </div>
       )}
-      <div className="d-bars">
-        <Barcode code={String(p.barcode)} />
-        <div className="d-code n">{p.barcode}</div>
-      </div>
-    </div>
+
+      {type === 'miss' && (
+        <div className="display-body">
+          <p className="display-state">{t.notFound}</p>
+          <p className="display-lede">{t.notFoundSub(shown.code)}</p>
+        </div>
+      )}
+
+      {product && (
+        <div className="display-body">
+          <div className="display-info">
+            <h2 className="display-name" title={product.name}>{product.name || '—'}</h2>
+            {product.note ? <p className="display-note">{product.note}</p> : null}
+
+            {priced ? (
+              <>
+                <p className="display-price">
+                  <span className="display-price-value n">{money(withVat(product.price))}</span>
+                  <span className="display-price-unit">{t.inclVat}</span>
+                </p>
+                <p className="display-sub">
+                  {t.beforeVatShort} <span className="n">{money(product.price)}</span> {t.cur}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="display-state">{t.noPrice}</p>
+                <p className="display-sub">{t.noPriceSub}</p>
+              </>
+            )}
+          </div>
+
+          <div className="display-code">
+            <Barcode code={String(product.barcode)} label={String(product.barcode)} />
+            <p className="display-digits n">{product.barcode}</p>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
+
+export default memo(DisplayPanel);

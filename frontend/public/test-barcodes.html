@@ -4,50 +4,105 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>باركودات للتجربة — استعلام الأسعار</title>
+<meta name="theme-color" content="#EEF0F2">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230E1216'/%3E%3Cg fill='%2321C08A'%3E%3Crect x='7' y='8' width='2' height='16' rx='1'/%3E%3Crect x='11' y='8' width='1' height='16' rx='.5'/%3E%3Crect x='14' y='8' width='3' height='16' rx='1'/%3E%3Crect x='19' y='8' width='1' height='16' rx='.5'/%3E%3Crect x='22' y='8' width='2' height='16' rx='1'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400..700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
-:root{--ink:#10201E;--muted:#7B8F8A;--line:#D3DAD7;--paper:#E9EDEB;--hit:#0B6E4F;--warn:#8A5A00;--miss:#A32C22}
+/* Mirrors the app's tokens so the two pages read as one product. */
+:root{
+  --bg:#EEF0F2; --surface:#FFF; --surface-2:#F4F6F7; --line:#E3E7EA; --line-2:#D2D8DD;
+  --txt:#11161B; --txt-2:#58616B; --txt-3:#8B939C;
+  --stage:#10151A; --on-stage:#FFF; --on-stage-2:#AEB7C1;
+  --accent:#12A46F; --accent-deep:#0A7A51; --accent-soft:#E6F6EF;
+  --warn:#B67A08; --warn-soft:#FCF4E3;
+  --bad:#D93B2F; --bad-soft:#FDECEA;
+  --sh:0 1px 2px rgba(14,20,26,.05),0 6px 18px rgba(14,20,26,.05);
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0B0E11; --surface:#151A20; --surface-2:#1B2129; --line:#232B34; --line-2:#303A45;
+    --txt:#EEF1F4; --txt-2:#A2ADB8; --txt-3:#717C88;
+    --stage:#0F151B; --accent:#23C88C; --accent-deep:#23C88C; --accent-soft:#10261E;
+    --warn:#E0AE4A; --warn-soft:#241C0C; --bad:#F16A5C; --bad-soft:#2A1512;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.3);
+  }
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:"Cairo",system-ui,sans-serif}
-.num{font-family:"IBM Plex Mono",monospace;direction:ltr;unicode-bidi:isolate;display:inline-block}
-.wrap{max-width:1000px;margin:0 auto;padding:22px 16px 60px}
-header{background:var(--ink);color:#EAF0EE;padding:16px}
-header h1{margin:0;font-size:18px;max-width:1000px;margin:0 auto}
-.how{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:20px}
-.how h2{margin:0 0 10px;font-size:15px}
-.how ol{margin:0;padding-inline-start:20px;line-height:2;font-size:14px;color:#38504B}
-.how li b{color:var(--ink)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
-.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 12px 10px;text-align:center}
-.card.warn{border-color:#EBD9AE;background:#FEFBF3}
-.card.miss{border-color:#F0CCC7;background:#FBE9E7}
-.nm{font-size:14px;font-weight:700;margin-bottom:8px;min-height:38px;display:flex;align-items:center;justify-content:center}
-svg{display:block;margin:0 auto}
-.code{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.16em;margin-top:4px;color:#38504B;direction:ltr}
-.exp{margin-top:8px;font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:7px}
-.exp b{color:var(--hit);font-size:15px}
-.card.warn .exp b{color:var(--warn);font-size:12.5px}
-.card.miss .exp b{color:var(--miss);font-size:12.5px}
-.btn{background:var(--ink);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer}
+body{
+  margin:0;background:var(--bg);color:var(--txt);
+  font-family:"Cairo",system-ui,sans-serif;line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;display:inline-block}
+
+header{background:var(--stage);color:var(--on-stage);padding:22px 20px}
+.head-in{max-width:1060px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.mark{display:flex;align-items:flex-end;gap:2px;height:20px;color:var(--accent)}
+.mark i{display:block;height:100%;background:currentColor;border-radius:1px}
+.mark i:nth-child(2n){height:62%} .mark i:nth-child(3n){height:84%}
+h1{margin:0;font-size:19px;font-weight:600;letter-spacing:-.015em}
+.sub{margin:2px 0 0;font-size:13px;color:var(--on-stage-2)}
+
+.wrap{max-width:1060px;margin:0 auto;padding:24px 20px 64px}
+.how{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:24px;box-shadow:var(--sh)}
+.how h2{margin:0 0 12px;font-size:15px;font-weight:600}
+.how ol{margin:0;padding-inline-start:20px;font-size:14px;color:var(--txt-2);line-height:2}
+.how li b{color:var(--txt);font-weight:600}
+.btn{
+  margin-top:16px;background:var(--txt);color:var(--bg);border:0;border-radius:12px;
+  padding:10px 18px;font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;
+}
+.btn:hover{opacity:.88}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:14px}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  padding:16px 14px 12px;text-align:center;box-shadow:var(--sh);
+  display:flex;flex-direction:column;
+}
+.card.warn{border-color:var(--warn);background:var(--warn-soft)}
+.card.miss{border-color:var(--bad);background:var(--bad-soft)}
+.nm{font-size:14px;font-weight:600;margin-bottom:10px;min-height:42px;display:flex;align-items:center;justify-content:center}
+.bars{background:#fff;border-radius:8px;padding:8px 4px 4px}
+svg{display:block;margin:0 auto;max-width:100%;height:auto}
+.exp{margin-top:auto;padding-top:10px;font-size:12.5px;color:var(--txt-3);border-top:1px dashed var(--line-2)}
+.exp b{font-size:15px;color:var(--accent-deep)}
+.card.warn .exp b,.card.miss .exp b{font-size:12.5px}
+.card.warn .exp b{color:var(--warn)}
+.card.miss .exp b{color:var(--bad)}
+
 @media print{
-  header,.how,.btn{display:none}
-  body{background:#fff}
+  header,.how{display:none}
+  body{background:#fff;color:#000}
   .wrap{padding:0;max-width:none}
-  .card{break-inside:avoid;border-color:#999}
+  .card{break-inside:avoid;border-color:#999;box-shadow:none;background:#fff}
+  .grid{gap:8px}
 }
 </style>
 </head>
 <body>
-<header><h1>باركودات جاهزة لتجربة التطبيق</h1></header>
-<div class="wrap">
+<header>
+  <div class="head-in">
+    <span class="mark" aria-hidden="true">
+      <i style="width:2px"></i><i style="width:1px"></i><i style="width:3px"></i><i style="width:1px"></i><i style="width:2px"></i><i style="width:4px"></i><i style="width:1px"></i><i style="width:2px"></i>
+    </span>
+    <div>
+      <h1>باركودات جاهزة لتجربة التطبيق</h1>
+      <p class="sub">EAN-13 سليمة — تنفع للكيبورد والكاميرا والسكانر</p>
+    </div>
+  </div>
+</header>
 
+<div class="wrap">
   <div class="how">
     <h2>تجرب إزاي وانت مش معاك سكانر</h2>
     <ol>
       <li><b>بالكيبورد (أسرع طريقة):</b> السكانر مش بيعمل حاجة غير إنه بيكتب الأرقام وبيدوس Enter. افتح التطبيق واكتب الباركود بإيدك أو الصقه ودوس <b>Enter</b> — نفس النتيجة بالظبط.</li>
-      <li><b>بالكاميرا:</b> افتح الصفحة دي على اللابتوب، وافتح التطبيق على الموبايل، اضغط «مسح بالكاميرا» ووجّهها على الشاشة. الباركودات دي EAN-13 سليمة وبتتقري فعلاً.</li>
+      <li><b>بالكاميرا:</b> افتح الصفحة دي على اللابتوب، وافتح التطبيق على الموبايل، اضغط «مسح بالكاميرا» ووجّهها على الشاشة.</li>
       <li><b>على ورق:</b> اطبع الصفحة دي وجرّب عليها بالسكانر الحقيقي لما يوصلك.</li>
       <li><b>تتأكد من إيه:</b> امسح نفس الصنف 3 مرات لازم يبقى سطر واحد كمية 3 · «فلين سومو» لازم يطلع تحذير السعر غير مسجل · الصنف الوهمي لازم يطلع أحمر.</li>
     </ol>
@@ -59,45 +114,60 @@ svg{display:block;margin:0 auto}
 
 <script id="cards" type="application/json">[{"name": "برشوت يوم التأسيس", "barcode": "6285534145371", "price": 10.0}, {"name": "كرات بمبم ملون", "barcode": "7647168541773", "price": 5.0}, {"name": "شريط لاصق شفاف", "barcode": "6285534107935", "price": 1.0}, {"name": "صلصال", "barcode": "8000144007066", "price": 9.0}, {"name": "شنطة جيوب زورو", "barcode": "6285534143421", "price": 17.0}, {"name": "أقلام تلوين خشبية", "barcode": "6281072123697", "price": 26.0}, {"name": "زينة رمضان", "barcode": "6920120093116", "price": 45.0}, {"name": "حامل رسم كبير", "barcode": "6285534038918", "price": 115.0}, {"name": "الة حاسبة", "barcode": "4549526611513", "price": 120.0}, {"name": "فلين سومو", "barcode": "6947439632546", "price": null}, {"name": "صنف مش موجود في القائمة", "barcode": "6289999123455", "price": "MISS"}]</script>
 <script>
-(function(){
-var L=['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
-var G=['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
-var R=L.map(function(s){return s.replace(/[01]/g,function(c){return c==='1'?'0':'1';});});
-var P=['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+(function () {
+  /* EAN-13 encoding tables: left-odd (L), left-even (G), right (R) and the
+     first-digit parity pattern that selects L/G per position. */
+  var L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+  var G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+  var R = L.map(function (s) { return s.replace(/[01]/g, function (c) { return c === '1' ? '0' : '1'; }); });
+  var PARITY = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
 
-function bits(code){
-  var d=code.split('').map(Number), par=P[d[0]], out='101';
-  for(var i=1;i<=6;i++) out += (par[i-1]==='L'?L:G)[d[i]];
-  out += '01010';
-  for(var j=7;j<=12;j++) out += R[d[j]];
-  return out + '101';
-}
-function svg(code){
-  var b=bits(code), mw=2.4, h=66, guardH=h+8, pad=10;
-  var w=b.length*mw + pad*2;
-  var s='<svg width="'+w+'" height="'+(guardH+16)+'" viewBox="0 0 '+w+' '+(guardH+16)+'" role="img" aria-label="باركود '+code+'">';
-  s+='<rect width="'+w+'" height="'+(guardH+16)+'" fill="#fff"/>';
-  for(var i=0;i<b.length;i++){
-    if(b[i]!=='1') continue;
-    var isGuard = (i<3)||(i>=45&&i<50)||(i>=b.length-3);
-    s+='<rect x="'+(pad+i*mw).toFixed(2)+'" y="0" width="'+mw.toFixed(2)+'" height="'+(isGuard?guardH:h)+'" fill="#000"/>';
+  function bits(code) {
+    var d = code.split('').map(Number);
+    var parity = PARITY[d[0]];
+    var out = '101';
+    for (var i = 1; i <= 6; i++) out += (parity[i - 1] === 'L' ? L : G)[d[i]];
+    out += '01010';
+    for (var j = 7; j <= 12; j++) out += R[d[j]];
+    return out + '101';
   }
-  s+='<text x="'+(w/2)+'" y="'+(guardH+13)+'" text-anchor="middle" font-family="monospace" font-size="12" letter-spacing="2" fill="#000">'+code+'</text>';
-  return s+'</svg>';
-}
 
-var cards=JSON.parse(document.getElementById('cards').textContent);
-var grid=document.getElementById('grid');
-cards.forEach(function(c){
-  var miss = c.price==='MISS', none = (c.price===null);
-  var el=document.createElement('div');
-  el.className='card'+(miss?' miss':(none?' warn':''));
-  var exp = miss ? '<b>لازم يطلع: باركود غير موجود</b>'
-          : none ? '<b>لازم يطلع: السعر غير مسجل</b>'
-          : 'السعر المتوقع <b><span class="num">'+(Math.round(c.price*1.15*100)/100).toFixed(2)+'</span> ر.س</b>';
-  el.innerHTML='<div class="nm">'+c.name+'</div>'+svg(c.barcode)+'<div class="exp">'+exp+'</div>';
-  grid.appendChild(el);
-});
+  function svg(code) {
+    var b = bits(code), mw = 2.4, h = 66, guardH = h + 8, pad = 10;
+    var w = b.length * mw + pad * 2, total = guardH + 16;
+    var s = '<svg width="' + w + '" height="' + total + '" viewBox="0 0 ' + w + ' ' + total
+          + '" role="img" aria-label="باركود ' + code + '" shape-rendering="crispEdges">';
+    s += '<rect width="' + w + '" height="' + total + '" fill="#fff"/>';
+    for (var i = 0; i < b.length; i++) {
+      if (b[i] !== '1') continue;
+      var isGuard = (i < 3) || (i >= 45 && i < 50) || (i >= b.length - 3);
+      s += '<rect x="' + (pad + i * mw).toFixed(2) + '" y="0" width="' + mw.toFixed(2)
+         + '" height="' + (isGuard ? guardH : h) + '" fill="#000"/>';
+    }
+    s += '<text x="' + (w / 2) + '" y="' + (guardH + 13) + '" text-anchor="middle" '
+       + 'font-family="monospace" font-size="12" letter-spacing="2" fill="#000">' + code + '</text>';
+    return s + '</svg>';
+  }
+
+  var cards = JSON.parse(document.getElementById('cards').textContent);
+  var grid = document.getElementById('grid');
+
+  cards.forEach(function (c) {
+    var miss = c.price === 'MISS';
+    var none = c.price === null;
+    var el = document.createElement('div');
+    el.className = 'card' + (miss ? ' miss' : none ? ' warn' : '');
+
+    var expected = miss ? '<b>لازم يطلع: باركود غير موجود</b>'
+      : none ? '<b>لازم يطلع: السعر غير مسجل</b>'
+      : 'السعر المتوقع <b><span class="num">'
+        + (Math.round(c.price * 1.15 * 100) / 100).toFixed(2) + '</span> ر.س</b>';
+
+    el.innerHTML = '<div class="nm">' + c.name + '</div>'
+                 + '<div class="bars">' + svg(c.barcode) + '</div>'
+                 + '<div class="exp">' + expected + '</div>';
+    grid.appendChild(el);
+  });
 })();
 </script>
 </body>

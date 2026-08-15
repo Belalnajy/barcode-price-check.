@@ -2,12 +2,38 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>استعلام الأسعار — Price Check</title>
-<meta name="theme-color" content="#101418">
+<meta name="description" content="استعلام أسعار بالباركود — Barcode price lookup with VAT, bilingual Arabic/English.">
+<meta name="theme-color" content="#EEF0F2">
+<meta name="color-scheme" content="light dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230E1216'/%3E%3Cg fill='%2321C08A'%3E%3Crect x='7' y='8' width='2' height='16' rx='1'/%3E%3Crect x='11' y='8' width='1' height='16' rx='.5'/%3E%3Crect x='14' y='8' width='3' height='16' rx='1'/%3E%3Crect x='19' y='8' width='1' height='16' rx='.5'/%3E%3Crect x='22' y='8' width='2' height='16' rx='1'/%3E%3C/g%3E%3C/svg%3E">
+
+<!-- Cairo and Inter are variable fonts: one file each covers 400–700. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400..700&family=Inter:wght@400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400..700&family=Inter:wght@400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<script>
+/* Paint the right theme on the very first frame — no white flash on a dark till. */
+(function () {
+  try {
+    var saved = localStorage.getItem('theme');
+    var theme = saved === 'light' || saved === 'dark'
+      ? saved
+      : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    var root = document.documentElement;
+    root.dataset.theme = theme;
+    root.style.colorScheme = theme;
+    if (localStorage.getItem('lang') === 'en') { root.lang = 'en'; root.dir = 'ltr'; }
+    document.querySelector('meta[name="theme-color"]')
+      .setAttribute('content', theme === 'dark' ? '#0B0E11' : '#EEF0F2');
+  } catch (e) { /* private mode — the app still renders */ }
+})();
+</script>
 </head>
 <body>
 <div id="root"></div>

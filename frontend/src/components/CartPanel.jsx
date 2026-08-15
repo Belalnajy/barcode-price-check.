@@ -1,75 +1,115 @@
-import { money, withVat } from '../lib/format';
+import { memo } from 'react';
+import { hasPrice, lineTotal, money, withVat } from '../lib/format';
+import { MAX_QTY } from '../hooks/useCart';
 
-const EMPTY_BARS = [
-  { height: '100%' },
-  { height: '52%' },
-  { height: '100%', width: '4px' },
-  { height: '38%' },
-  { height: '88%' },
-  { height: '100%', width: '3px' },
-  { height: '58%' },
-  { height: '100%' },
-];
+const EMPTY_MARK = [2, 1, 3, 1, 2, 4, 1, 2, 1, 3];
 
-export default function CartPanel({ t, cart, totals, lastTouched, onSetQty, onRemove, onPrint, onClear }) {
+const CartRow = memo(function CartRow({ line, t, flash, onSetQty, onRemove }) {
+  const priced = hasPrice(line);
   return (
-    <div className="panel">
-      <div className="p-head">
-        <span className="p-title">{t.listTitle}</span>
-        <span className="p-count">
-          {cart.length ? `${cart.length} ${t.unitItems} · ${totals.pieces} ${t.unitPieces}` : ''}
-        </span>
-        <span className="spacer" />
-        <button className="ghost" onClick={onPrint}>{t.print}</button>
-        <button className="ghost" onClick={onClear}>{t.clear}</button>
+    <li className={`line${priced ? '' : ' is-unpriced'}${flash ? ` ${flash}` : ''}`}>
+      <div className="line-main">
+        <p className="line-name" title={line.name}>{line.name || '—'}</p>
+        <p className="line-meta">
+          <span className="n line-code">{line.barcode}</span>
+          {priced ? (
+            <span className="tag">{t.each} <span className="n">{money(withVat(line.price))}</span></span>
+          ) : (
+            <span className="tag is-warn">{t.noPrice}</span>
+          )}
+          {line.note ? <span className="tag">{line.note}</span> : null}
+        </p>
       </div>
 
-      <div id="rows">
-        {cart.map((l) => {
-          const none = l.price === null || l.price === undefined;
-          return (
-            <div
-              key={l.barcode}
-              className={`row${none ? ' np' : ''}${l.barcode === lastTouched ? ' flash' : ''}`}
-            >
-              <div className="r-l">
-                <div className="r-n">{l.name || '—'}</div>
-                <div className="r-m">
-                  <span className="n">{l.barcode}</span>
-                  {none ? (
-                    <span className="chip w">{t.noPrice}</span>
-                  ) : (
-                    <span className="chip">{t.each} <span className="n">{money(withVat(l.price))}</span></span>
-                  )}
-                  {l.note ? <span className="chip">{l.note}</span> : null}
-                </div>
-              </div>
-
-              <div className="qty">
-                <button aria-label="-" onClick={() => onSetQty(l.barcode, -1)}>−</button>
-                <span className="n">{l.qty}</span>
-                <button aria-label="+" onClick={() => onSetQty(l.barcode, 1)}>+</button>
-              </div>
-
-              <div className={`r-t${none ? ' none' : ''}`}>
-                {none ? t.notCounted : <span className="n">{money(withVat(l.price) * l.qty)}</span>}
-              </div>
-
-              <button className="r-x" aria-label="remove" onClick={() => onRemove(l.barcode)}>×</button>
-            </div>
-          );
-        })}
+      <div className="stepper">
+        <button
+          type="button"
+          aria-label={`${t.less} — ${line.name || line.barcode}`}
+          onClick={() => onSetQty(line.barcode, -1)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 12h12" /></svg>
+        </button>
+        <span className="stepper-value n">{line.qty}</span>
+        <button
+          type="button"
+          aria-label={`${t.more} — ${line.name || line.barcode}`}
+          disabled={line.qty >= MAX_QTY}
+          onClick={() => onSetQty(line.barcode, 1)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 6v12M6 12h12" /></svg>
+        </button>
       </div>
 
-      {cart.length === 0 && (
-        <div className="empty">
-          <span className="bars" aria-hidden="true">
-            {EMPTY_BARS.map((s, i) => <i key={i} style={s} />)}
-          </span>
-          <p>{t.emptyTitle}</p>
-          <small>{t.emptySub}</small>
+      <p className={`line-total${priced ? '' : ' is-none'}`}>
+        {priced ? <span className="n">{money(lineTotal(line.price, line.qty))}</span> : t.notCounted}
+      </p>
+
+      <button
+        type="button"
+        className="line-remove"
+        aria-label={`${t.removeLine} — ${line.name || line.barcode}`}
+        onClick={() => onRemove(line.barcode)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M7 7l10 10M17 7L7 17" /></svg>
+      </button>
+    </li>
+  );
+});
+
+function CartPanel({ t, cart, totals, lastTouched, onSetQty, onRemove, onPrint, onClear }) {
+  const empty = cart.length === 0;
+
+  return (
+    <section className="panel cart">
+      <header className="panel-head">
+        <h2 className="panel-title">{t.listTitle}</h2>
+        {!empty && (
+          <p className="panel-sub">
+            <span className="n">{cart.length}</span> {t.unitItems}
+            <span className="dot-sep" aria-hidden="true" />
+            <span className="n">{totals.pieces}</span> {t.unitPieces}
+          </p>
+        )}
+        <div className="panel-actions">
+          <button type="button" className="btn btn-quiet btn-sm" onClick={onPrint} disabled={empty}>
+            {t.print}
+          </button>
+          <button type="button" className="btn btn-quiet btn-sm" onClick={onClear} disabled={empty}>
+            {t.clear}
+          </button>
         </div>
+      </header>
+
+      {empty ? (
+        <div className="empty">
+          <span className="mark mark-lg" aria-hidden="true">
+            {EMPTY_MARK.map((w, i) => <i key={i} style={{ width: w }} />)}
+          </span>
+          <p className="empty-title">{t.emptyTitle}</p>
+          <p className="empty-sub">{t.emptySub}</p>
+        </div>
+      ) : (
+        <ul className="lines">
+          {cart.map((line) => (
+            <CartRow
+              key={line.barcode}
+              line={line}
+              t={t}
+              /* Alternating class names so a repeat scan of the same product
+                 restarts the highlight instead of re-applying a finished one. */
+              flash={
+                line.barcode === lastTouched.barcode
+                  ? (lastTouched.seq % 2 ? 'is-new-a' : 'is-new-b')
+                  : ''
+              }
+              onSetQty={onSetQty}
+              onRemove={onRemove}
+            />
+          ))}
+        </ul>
       )}
-    </div>
+    </section>
   );
 }
+
+export default memo(CartPanel);
