@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>باركودات للتجربة — استعلام الأسعار</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#10201E;--muted:#7B8F8A;--line:#D3DAD7;--paper:#E9EDEB;--hit:#0B6E4F;--warn:#8A5A00;--miss:#A32C22}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Cairo",system-ui,sans-serif}
+.num{font-family:"IBM Plex Mono",monospace;direction:ltr;unicode-bidi:isolate;display:inline-block}
+.wrap{max-width:1000px;margin:0 auto;padding:22px 16px 60px}
+header{background:var(--ink);color:#EAF0EE;padding:16px}
+header h1{margin:0;font-size:18px;max-width:1000px;margin:0 auto}
+.how{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:20px}
+.how h2{margin:0 0 10px;font-size:15px}
+.how ol{margin:0;padding-inline-start:20px;line-height:2;font-size:14px;color:#38504B}
+.how li b{color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 12px 10px;text-align:center}
+.card.warn{border-color:#EBD9AE;background:#FEFBF3}
+.card.miss{border-color:#F0CCC7;background:#FBE9E7}
+.nm{font-size:14px;font-weight:700;margin-bottom:8px;min-height:38px;display:flex;align-items:center;justify-content:center}
+svg{display:block;margin:0 auto}
+.code{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.16em;margin-top:4px;color:#38504B;direction:ltr}
+.exp{margin-top:8px;font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:7px}
+.exp b{color:var(--hit);font-size:15px}
+.card.warn .exp b{color:var(--warn);font-size:12.5px}
+.card.miss .exp b{color:var(--miss);font-size:12.5px}
+.btn{background:var(--ink);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer}
+@media print{
+  header,.how,.btn{display:none}
+  body{background:#fff}
+  .wrap{padding:0;max-width:none}
+  .card{break-inside:avoid;border-color:#999}
+}
+</style>
+</head>
+<body>
+<header><h1>باركودات جاهزة لتجربة التطبيق</h1></header>
+<div class="wrap">
+
+  <div class="how">
+    <h2>تجرب إزاي وانت مش معاك سكانر</h2>
+    <ol>
+      <li><b>بالكيبورد (أسرع طريقة):</b> السكانر مش بيعمل حاجة غير إنه بيكتب الأرقام وبيدوس Enter. افتح التطبيق واكتب الباركود بإيدك أو الصقه ودوس <b>Enter</b> — نفس النتيجة بالظبط.</li>
+      <li><b>بالكاميرا:</b> افتح الصفحة دي على اللابتوب، وافتح التطبيق على الموبايل، اضغط «مسح بالكاميرا» ووجّهها على الشاشة. الباركودات دي EAN-13 سليمة وبتتقري فعلاً.</li>
+      <li><b>على ورق:</b> اطبع الصفحة دي وجرّب عليها بالسكانر الحقيقي لما يوصلك.</li>
+      <li><b>تتأكد من إيه:</b> امسح نفس الصنف 3 مرات لازم يبقى سطر واحد كمية 3 · «فلين سومو» لازم يطلع تحذير السعر غير مسجل · الصنف الوهمي لازم يطلع أحمر.</li>
+    </ol>
+    <button class="btn" onclick="window.print()">طباعة الصفحة</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script id="cards" type="application/json">[{"name": "برشوت يوم التأسيس", "barcode": "6285534145371", "price": 10.0}, {"name": "كرات بمبم ملون", "barcode": "7647168541773", "price": 5.0}, {"name": "شريط لاصق شفاف", "barcode": "6285534107935", "price": 1.0}, {"name": "صلصال", "barcode": "8000144007066", "price": 9.0}, {"name": "شنطة جيوب زورو", "barcode": "6285534143421", "price": 17.0}, {"name": "أقلام تلوين خشبية", "barcode": "6281072123697", "price": 26.0}, {"name": "زينة رمضان", "barcode": "6920120093116", "price": 45.0}, {"name": "حامل رسم كبير", "barcode": "6285534038918", "price": 115.0}, {"name": "الة حاسبة", "barcode": "4549526611513", "price": 120.0}, {"name": "فلين سومو", "barcode": "6947439632546", "price": null}, {"name": "صنف مش موجود في القائمة", "barcode": "6289999123455", "price": "MISS"}]</script>
+<script>
+(function(){
+var L=['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+var G=['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+var R=L.map(function(s){return s.replace(/[01]/g,function(c){return c==='1'?'0':'1';});});
+var P=['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+
+function bits(code){
+  var d=code.split('').map(Number), par=P[d[0]], out='101';
+  for(var i=1;i<=6;i++) out += (par[i-1]==='L'?L:G)[d[i]];
+  out += '01010';
+  for(var j=7;j<=12;j++) out += R[d[j]];
+  return out + '101';
+}
+function svg(code){
+  var b=bits(code), mw=2.4, h=66, guardH=h+8, pad=10;
+  var w=b.length*mw + pad*2;
+  var s='<svg width="'+w+'" height="'+(guardH+16)+'" viewBox="0 0 '+w+' '+(guardH+16)+'" role="img" aria-label="باركود '+code+'">';
+  s+='<rect width="'+w+'" height="'+(guardH+16)+'" fill="#fff"/>';
+  for(var i=0;i<b.length;i++){
+    if(b[i]!=='1') continue;
+    var isGuard = (i<3)||(i>=45&&i<50)||(i>=b.length-3);
+    s+='<rect x="'+(pad+i*mw).toFixed(2)+'" y="0" width="'+mw.toFixed(2)+'" height="'+(isGuard?guardH:h)+'" fill="#000"/>';
+  }
+  s+='<text x="'+(w/2)+'" y="'+(guardH+13)+'" text-anchor="middle" font-family="monospace" font-size="12" letter-spacing="2" fill="#000">'+code+'</text>';
+  return s+'</svg>';
+}
+
+var cards=JSON.parse(document.getElementById('cards').textContent);
+var grid=document.getElementById('grid');
+cards.forEach(function(c){
+  var miss = c.price==='MISS', none = (c.price===null);
+  var el=document.createElement('div');
+  el.className='card'+(miss?' miss':(none?' warn':''));
+  var exp = miss ? '<b>لازم يطلع: باركود غير موجود</b>'
+          : none ? '<b>لازم يطلع: السعر غير مسجل</b>'
+          : 'السعر المتوقع <b><span class="num">'+(Math.round(c.price*1.15*100)/100).toFixed(2)+'</span> ر.س</b>';
+  el.innerHTML='<div class="nm">'+c.name+'</div>'+svg(c.barcode)+'<div class="exp">'+exp+'</div>';
+  grid.appendChild(el);
+});
+})();
+</script>
+</body>
+</html>
