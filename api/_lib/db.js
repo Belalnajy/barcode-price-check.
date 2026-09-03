@@ -29,6 +29,39 @@ function shape(row) {
   };
 }
 
+/** A stored quote row → API shape, with server-computed totals so every
+    client (list view, print) shows the same figures. */
+function shapeQuote(row) {
+  const customer = row.customer && typeof row.customer === 'object' ? row.customer : {};
+  const items = Array.isArray(row.items) ? row.items : [];
+  let sub = 0;
+  let pieces = 0;
+  let missing = 0;
+  for (const line of items) {
+    const qty = Math.max(1, Math.floor(Number(line.qty)) || 1);
+    pieces += qty;
+    const price = line.price === null || line.price === undefined ? null : Number(line.price);
+    if (price === null || !Number.isFinite(price)) missing++;
+    else sub += round2(price * qty);
+  }
+  sub = round2(sub);
+  const vat = round2(sub * VAT);
+  return {
+    id: row.id,
+    number: `Q-${String(row.id).padStart(4, '0')}`,
+    customer: {
+      name: customer.name || '',
+      phone: customer.phone || '',
+      vatNumber: customer.vatNumber || '',
+      address: customer.address || '',
+    },
+    items,
+    totals: { sub, vat, all: round2(sub + vat), pieces, missing, lines: items.length },
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
 /* ---------------------------------------------------------------- *
  *  Postgres backend
  * ---------------------------------------------------------------- */
@@ -111,6 +144,15 @@ async function initPg() {
       id          INT PRIMARY KEY CHECK (id = 1),
       is_original BOOLEAN NOT NULL DEFAULT true,
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS quotes (
+      id         SERIAL PRIMARY KEY,
+      customer   JSONB NOT NULL DEFAULT '{}',
+      items      JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
   /* Name lookups are served from the client's local index, but keep an index
@@ -223,6 +265,48 @@ const pgStore = {
     });
     return this.list();
   },
+
+  /* ----------------------------- quotes ----------------------------- */
+  async quotesList() {
+    const { rows } = await getPool().query(
+      `SELECT id, customer, items, created_at, updated_at
+       FROM quotes ORDER BY updated_at DESC LIMIT 300`
+    );
+    return rows.map(shapeQuote);
+  },
+
+  async quoteGet(id) {
+    const { rows } = await getPool().query(
+      'SELECT id, customer, items, created_at, updated_at FROM quotes WHERE id = $1',
+      [id]
+    );
+    return rows[0] ? shapeQuote(rows[0]) : null;
+  },
+
+  async quoteCreate({ customer, items }) {
+    const { rows } = await getPool().query(
+      `INSERT INTO quotes (customer, items) VALUES ($1::jsonb, $2::jsonb)
+       RETURNING id, customer, items, created_at, updated_at`,
+      [JSON.stringify(customer), JSON.stringify(items)]
+    );
+    return shapeQuote(rows[0]);
+  },
+
+  async quoteUpdate(id, { customer, items }) {
+    const { rows } = await getPool().query(
+      `UPDATE quotes
+       SET customer = $2::jsonb, items = $3::jsonb, updated_at = now()
+       WHERE id = $1
+       RETURNING id, customer, items, created_at, updated_at`,
+      [id, JSON.stringify(customer), JSON.stringify(items)]
+    );
+    return rows[0] ? shapeQuote(rows[0]) : null;
+  },
+
+  async quoteRemove(id) {
+    const { rowCount } = await getPool().query('DELETE FROM quotes WHERE id = $1', [id]);
+    return rowCount > 0;
+  },
 };
 
 /* ---------------------------------------------------------------- *
@@ -238,7 +322,13 @@ function seedMap() {
   return map;
 }
 
-const memState = { map: seedMap(), isOriginal: true, updatedAt: null };
+const memState = {
+  map: seedMap(),
+  isOriginal: true,
+  updatedAt: null,
+  quotes: new Map(),
+  nextQuoteId: 1,
+};
 
 const memStore = {
   kind: 'memory',
@@ -294,6 +384,39 @@ const memStore = {
     memState.isOriginal = true;
     memState.updatedAt = null;
     return this.list();
+  },
+
+  /* ----------------------------- quotes ----------------------------- */
+  async quotesList() {
+    return Array.from(memState.quotes.values())
+      .sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
+      .slice(0, 300)
+      .map(shapeQuote);
+  },
+
+  async quoteGet(id) {
+    const row = memState.quotes.get(id);
+    return row ? shapeQuote(row) : null;
+  },
+
+  async quoteCreate({ customer, items }) {
+    const now = new Date().toISOString();
+    const row = { id: memState.nextQuoteId++, customer, items, created_at: now, updated_at: now };
+    memState.quotes.set(row.id, row);
+    return shapeQuote(row);
+  },
+
+  async quoteUpdate(id, { customer, items }) {
+    const row = memState.quotes.get(id);
+    if (!row) return null;
+    row.customer = customer;
+    row.items = items;
+    row.updated_at = new Date().toISOString();
+    return shapeQuote(row);
+  },
+
+  async quoteRemove(id) {
+    return memState.quotes.delete(id);
   },
 };
 

@@ -61,6 +61,44 @@ function cleanItem(raw) {
   return { barcode, name, price, note: noteText ? noteText.slice(0, 300) : null };
 }
 
+const text = (v, max) => String(v === null || v === undefined ? '' : v).trim().slice(0, max);
+
+/** Customer block on a quote. Only the name is required; the VAT number is
+    for company customers and is stored digits-only. */
+function cleanCustomer(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const name = text(source.name, 200);
+  if (!name) return null;
+  const vatDigits = text(source.vatNumber, 40).replace(/[^0-9]/g, '');
+  if (vatDigits && (vatDigits.length < 5 || vatDigits.length > 20)) return null;
+  return {
+    name,
+    phone: text(source.phone, 50),
+    vatNumber: vatDigits,
+    address: text(source.address, 300),
+  };
+}
+
+/** Quote lines are a snapshot of the cart: catalog item + quantity. */
+function cleanQuoteItems(raw) {
+  if (!Array.isArray(raw) || !raw.length || raw.length > 500) return null;
+  const seen = new Set();
+  const items = [];
+  for (const row of raw) {
+    const item = cleanItem(row);
+    if (!item || seen.has(item.barcode)) continue;
+    seen.add(item.barcode);
+    const qty = Math.floor(Number(row && row.qty));
+    items.push({ ...item, qty: Math.min(9999, Math.max(1, Number.isFinite(qty) ? qty : 1)) });
+  }
+  return items.length ? items : null;
+}
+
+function cleanQuoteId(v) {
+  const id = Number(v);
+  return Number.isInteger(id) && id > 0 && id <= 2147483647 ? id : null;
+}
+
 /* ------------------------------ routes ------------------------------ */
 router.get('/health', (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -144,6 +182,70 @@ router.post('/products/reset', async (req, res, next) => {
   try {
     res.json(await store.reset());
   } catch (e) { next(e); }
+});
+
+/* --------------------------- price quotes --------------------------- */
+/* Saved customer quotes: created from the cart, reopened later to edit. */
+router.get('/quotes', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json({ quotes: await store.quotesList() });
+  } catch (e) { next(e); }
+});
+
+router.get('/quotes/:id', async (req, res, next) => {
+  try {
+    const id = cleanQuoteId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid_id' });
+
+    const quote = await store.quoteGet(id);
+    if (!quote) return res.status(404).json({ error: 'not_found' });
+
+    res.set('Cache-Control', 'no-store');
+    return res.json(quote);
+  } catch (e) { return next(e); }
+});
+
+router.post('/quotes', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const customer = cleanCustomer(body.customer);
+    if (!customer) return res.status(400).json({ error: 'invalid_customer' });
+
+    const items = cleanQuoteItems(body.items);
+    if (!items) return res.status(400).json({ error: 'invalid_items' });
+
+    return res.status(201).json(await store.quoteCreate({ customer, items }));
+  } catch (e) { return next(e); }
+});
+
+router.put('/quotes/:id', async (req, res, next) => {
+  try {
+    const id = cleanQuoteId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid_id' });
+
+    const body = req.body || {};
+    const customer = cleanCustomer(body.customer);
+    if (!customer) return res.status(400).json({ error: 'invalid_customer' });
+
+    const items = cleanQuoteItems(body.items);
+    if (!items) return res.status(400).json({ error: 'invalid_items' });
+
+    const quote = await store.quoteUpdate(id, { customer, items });
+    if (!quote) return res.status(404).json({ error: 'not_found' });
+    return res.json(quote);
+  } catch (e) { return next(e); }
+});
+
+router.delete('/quotes/:id', async (req, res, next) => {
+  try {
+    const id = cleanQuoteId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid_id' });
+
+    const removed = await store.quoteRemove(id);
+    if (!removed) return res.status(404).json({ error: 'not_found' });
+    return res.json({ deleted: true, id });
+  } catch (e) { return next(e); }
 });
 
 /* Mounted twice so the same app works behind Vercel's rewrite (which keeps

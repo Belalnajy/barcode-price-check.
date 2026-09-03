@@ -56,7 +56,10 @@ const CartRow = memo(function CartRow({ line, t, flash, onSetQty, onRemove }) {
   );
 });
 
-function CartPanel({ t, cart, totals, lastTouched, onSetQty, onRemove, onPrint, onClear }) {
+function CartPanel({
+  t, cart, totals, lastTouched, activeQuote,
+  onSetQty, onRemove, onPrint, onClear, onSaveQuote, onStopEditing,
+}) {
   const empty = cart.length === 0;
 
   return (
@@ -71,6 +74,9 @@ function CartPanel({ t, cart, totals, lastTouched, onSetQty, onRemove, onPrint, 
           </p>
         )}
         <div className="panel-actions">
+          <button type="button" className="btn btn-quiet btn-sm" onClick={onSaveQuote} disabled={empty}>
+            {activeQuote ? t.updateQuote : t.quoteBtn}
+          </button>
           <button type="button" className="btn btn-quiet btn-sm" onClick={onPrint} disabled={empty}>
             {t.print}
           </button>
@@ -79,6 +85,18 @@ function CartPanel({ t, cart, totals, lastTouched, onSetQty, onRemove, onPrint, 
           </button>
         </div>
       </header>
+
+      {activeQuote && (
+        <p className="quote-banner">
+          <span>
+            {t.editingQuote(activeQuote.number)}
+            {activeQuote.customer.name ? <> — {activeQuote.customer.name}</> : null}
+          </span>
+          <button type="button" className="btn btn-quiet btn-sm" onClick={onStopEditing}>
+            {t.stopEditing}
+          </button>
+        </p>
+      )}
 
       {empty ? (
         <div className="empty">

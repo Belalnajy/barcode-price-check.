@@ -274,3 +274,83 @@ describe('unknown routes', () => {
     expect((await res.json()).error).toBe('route_not_found');
   });
 });
+
+describe('quotes CRUD', () => {
+  const put = (path, body) => fetch(`${base}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const del = (path) => fetch(`${base}${path}`, { method: 'DELETE' });
+
+  const customer = {
+    name: 'شركة النور للتجارة',
+    phone: '0501234567',
+    vatNumber: '310123456700003',
+    address: 'الرياض — حي العليا',
+  };
+  const items = [
+    { barcode: '6285534145371', name: 'برشوت يوم التأسيس', price: 10, qty: 3 },
+    { barcode: '8000144007066', name: 'صلصال', price: null, qty: 1 },
+  ];
+
+  it('creates a quote with server-computed totals and a number', async () => {
+    const res = await post('/api/quotes', { customer, items });
+    expect(res.status).toBe(201);
+    const quote = await res.json();
+    expect(quote.number).toBe(`Q-${String(quote.id).padStart(4, '0')}`);
+    expect(quote.customer).toEqual(customer);
+    // 3 × 10 = 30 before VAT; the unpriced line counts as missing, not zero.
+    expect(quote.totals).toMatchObject({ sub: 30, vat: 4.5, all: 34.5, pieces: 4, missing: 1, lines: 2 });
+  });
+
+  it('requires a customer name and valid items', async () => {
+    let res = await post('/api/quotes', { customer: { name: '   ' }, items });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('invalid_customer');
+
+    res = await post('/api/quotes', { customer, items: [] });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('invalid_items');
+  });
+
+  it('keeps only the digits of the VAT number and rejects malformed ones', async () => {
+    let res = await post('/api/quotes', {
+      customer: { ...customer, vatNumber: '3101-2345-6700-003' },
+      items,
+    });
+    expect((await res.json()).customer.vatNumber).toBe('310123456700003');
+
+    res = await post('/api/quotes', { customer: { ...customer, vatNumber: '123' }, items });
+    expect(res.status).toBe(400);
+  });
+
+  it('lists, reads, updates and deletes a quote', async () => {
+    const created = await (await post('/api/quotes', { customer, items })).json();
+
+    let res = await get('/api/quotes');
+    expect((await res.json()).quotes.some((q) => q.id === created.id)).toBe(true);
+
+    res = await get(`/api/quotes/${created.id}`);
+    expect((await res.json()).customer.name).toBe(customer.name);
+
+    res = await put(`/api/quotes/${created.id}`, {
+      customer: { ...customer, name: 'عميل معدّل' },
+      items: [{ barcode: '6285534145371', name: 'برشوت', price: 10, qty: 5 }],
+    });
+    const updated = await res.json();
+    expect(updated.customer.name).toBe('عميل معدّل');
+    expect(updated.totals).toMatchObject({ sub: 50, all: 57.5, lines: 1 });
+    expect(updated.number).toBe(created.number);
+
+    res = await del(`/api/quotes/${created.id}`);
+    expect((await res.json()).deleted).toBe(true);
+    expect((await get(`/api/quotes/${created.id}`)).status).toBe(404);
+  });
+
+  it('404s on updating or deleting a quote that never existed', async () => {
+    expect((await put('/api/quotes/999999', { customer, items })).status).toBe(404);
+    expect((await del('/api/quotes/999999')).status).toBe(404);
+    expect((await get('/api/quotes/abc')).status).toBe(400);
+  });
+});

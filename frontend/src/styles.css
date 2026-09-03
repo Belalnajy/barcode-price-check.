@@ -1324,6 +1324,58 @@ html[dir="rtl"] .dlg-head { padding: var(--s3) var(--s5) var(--s3) var(--s3); }
 }
 
 /* ========================================================================
+   quotes — saved-quotes list + the "editing quote" banner on the cart
+   ======================================================================== */
+.quote-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--accent-deep);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+.quote-banner .n { font-weight: 600; }
+.quote-banner .btn { margin-inline-start: auto; flex-shrink: 0; }
+
+.qlist { list-style: none; display: flex; flex-direction: column; }
+.qrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.qrow:last-child { border-bottom: 0; }
+.qrow.is-active { background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 10px; }
+.qrow-main { flex: 1; min-width: 0; }
+.qrow-name {
+  font-size: 14px;
+  font-weight: 550;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qrow-no {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 5px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+.qrow-meta { font-size: 11.5px; color: var(--txt-3); margin-top: 2px; display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; }
+.qrow-total { font-size: 14.5px; font-weight: 600; white-space: nowrap; }
+.qrow-total small { font-size: 11px; font-weight: 400; color: var(--txt-3); }
+.qrow-actions { display: flex; align-items: center; gap: 4px; }
+
+/* ========================================================================
    print — its own sheet, rendered only while printing
    ======================================================================== */
 .print-sheet { display: none; }
@@ -1339,18 +1391,62 @@ html[dir="rtl"] .dlg-head { padding: var(--s3) var(--s5) var(--s3) var(--s3); }
     font-size: 11pt;
     color: #000;
   }
-  .print-head { text-align: center; margin-bottom: 14pt; }
-  .print-head h1 { font-size: 15pt; font-weight: 700; margin-bottom: 2pt; }
-  .print-head p { font-size: 9pt; color: #555; }
+  /* Document header: brand on one side, title + quote number/date on the other. */
+  .print-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12pt;
+    padding-bottom: 10pt;
+    border-bottom: 2pt solid #000;
+    margin-bottom: 12pt;
+  }
+  .print-mark { display: flex; align-items: flex-end; gap: 1.5pt; height: 14pt; }
+  .print-mark i { display: block; height: 100%; background: #000; }
+  .print-mark i:nth-child(2n) { height: 62%; }
+  .print-shop { font-size: 13pt; font-weight: 700; margin-top: 4pt; }
+  .print-doc { text-align: end; }
+  .print-doc h1 { font-size: 17pt; font-weight: 700; margin-bottom: 4pt; }
+  .print-meta { margin-inline-start: auto; border-collapse: collapse; }
+  .print-meta th {
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: #555;
+    text-align: start;
+    padding: 1pt 0;
+    padding-inline-end: 8pt;
+  }
+  .print-meta td { font-size: 10pt; text-align: end; padding: 1pt 0; }
+
+  /* Customer block on saved quotes. */
+  .print-customer {
+    border: 1pt solid #000;
+    border-radius: 3pt;
+    padding: 6pt 9pt;
+    margin-bottom: 12pt;
+  }
+  .print-customer-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4pt 10pt;
+    font-size: 10.5pt;
+    padding: 1.5pt 0;
+  }
+  .print-customer-row strong { font-weight: 700; }
+  .print-label { font-size: 8.5pt; font-weight: 600; color: #555; }
+  .print-label::after { content: ':'; }
 
   /* Fixed layout: without it the auto algorithm collapses the money columns
      against each other once the product names are long. */
   .print-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .print-table col.c-name  { width: 37%; }
-  .print-table col.c-code  { width: 21%; }
+  .print-table col.c-seq   { width: 5%; }
+  .print-table col.c-name  { width: 34%; }
+  .print-table col.c-code  { width: 20%; }
+  .print-table col.c-qty   { width: 9%; }
   .print-table col.c-each  { width: 14%; }
-  .print-table col.c-qty   { width: 10%; }
   .print-table col.c-total { width: 18%; }
+  .print-table tbody tr:nth-child(2n) td { background: #f5f5f5; }
 
   .print-table th {
     font-size: 8.5pt;
@@ -1363,7 +1459,7 @@ html[dir="rtl"] .dlg-head { padding: var(--s3) var(--s5) var(--s3) var(--s3); }
   .print-table td {
     font-size: 10pt;
     padding: 4pt 3pt;
-    border-bottom: .5pt dashed #999;
+    border-bottom: .5pt solid #ccc;
     vertical-align: top;
     overflow-wrap: anywhere;
   }
@@ -1372,7 +1468,14 @@ html[dir="rtl"] .dlg-head { padding: var(--s3) var(--s5) var(--s3) var(--s3); }
   .print-table thead { display: table-header-group; }
 
   .print-empty { text-align: center; padding: 24pt 0; font-size: 11pt; color: #555; }
-  .print-totals { margin-top: 10pt; border-top: 1.5pt solid #000; padding-top: 6pt; }
+  /* Totals sit in a narrow column on the end side, like a proper document. */
+  .print-totals {
+    margin-top: 10pt;
+    margin-inline-start: auto;
+    width: 55%;
+    border-top: 1.5pt solid #000;
+    padding-top: 6pt;
+  }
   .print-totals div { display: flex; justify-content: space-between; padding: 2pt 0; font-size: 10pt; }
   .print-totals .is-grand {
     font-size: 13pt;
