@@ -31,7 +31,7 @@ const SOUND_OFF = <path d="M11 5 6.5 9H3v6h3.5L11 19zM16 10l4 4M20 10l-4 4" />;
 
 function TopBar({
   t, statusText, statusTone, theme, muted,
-  onToggleTheme, onToggleSound, onToggleLang, onOpenCatalog,
+  onToggleTheme, onToggleSound, onToggleLang, onOpenCatalog, onOpenQuotes,
 }) {
   return (
     <header className="top">
@@ -78,6 +78,9 @@ function TopBar({
             aria-label={t.switchLang}
           >
             {t.other}
+          </button>
+          <button type="button" className="btn btn-quiet" onClick={onOpenQuotes}>
+            {t.quotesBtn}
           </button>
           <button type="button" className="btn btn-quiet" onClick={onOpenCatalog}>
             {t.btnCatalog}

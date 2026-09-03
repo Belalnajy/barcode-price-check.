@@ -59,4 +59,14 @@ export const api = {
   bulkImport: (items, mode) => req('/products/bulk', { method: 'POST', body: { items, mode } }),
   /** → { items, meta } */
   resetCatalog: () => req('/products/reset', { method: 'POST' }),
+
+  /* Saved customer quotes. Each quote → { id, number, customer, items, totals, ... } */
+  /** → { quotes: [...] } */
+  listQuotes: (signal) => req('/quotes', { signal }),
+  /** → quote */
+  createQuote: (customer, items) => req('/quotes', { method: 'POST', body: { customer, items } }),
+  /** → quote */
+  updateQuote: (id, customer, items) => req(`/quotes/${id}`, { method: 'PUT', body: { customer, items } }),
+  /** → { deleted, id } */
+  deleteQuote: (id) => req(`/quotes/${id}`, { method: 'DELETE' }),
 };

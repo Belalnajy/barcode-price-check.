@@ -109,6 +109,12 @@ export function useCart() {
     setCart([]);
   }, []);
 
+  /** Swap the whole list at once — used when a saved quote is reopened. */
+  const replaceAll = useCallback((lines) => {
+    setLastTouched({ barcode: null, seq: 0 });
+    setCart(sanitizeCart(lines));
+  }, []);
+
   /**
    * Refresh names and prices from the catalog. Without this a line scanned
    * before an price update would keep quoting the old figure indefinitely.
@@ -133,5 +139,5 @@ export function useCart() {
 
   const totals = useMemo(() => computeTotals(cart), [cart]);
 
-  return { cart, totals, lastTouched, addProduct, setQty, removeLine, clearCart, reconcile };
+  return { cart, totals, lastTouched, addProduct, setQty, removeLine, clearCart, replaceAll, reconcile };
 }

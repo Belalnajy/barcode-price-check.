@@ -13,12 +13,27 @@ import CartPanel from './components/CartPanel';
 import TotalsDock from './components/TotalsDock';
 import CameraDialog from './components/CameraDialog';
 import CatalogDialog from './components/CatalogDialog';
+import QuoteDialog from './components/QuoteDialog';
+import QuotesDialog from './components/QuotesDialog';
 import PrintSheet from './components/PrintSheet';
+import { api } from './lib/api';
 
 const IDLE = { type: 'idle' };
+const QUOTE_KEY = 'activeQuote';
 
 function readLang() {
   try { return localStorage.getItem('lang') === 'en' ? 'en' : 'ar'; } catch { return 'ar'; }
+}
+
+/** The quote being edited survives a refresh, like the cart it belongs to. */
+function readActiveQuote() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(QUOTE_KEY) || 'null');
+    if (raw && Number.isInteger(raw.id) && typeof raw.number === 'string' && raw.customer) {
+      return { id: raw.id, number: raw.number, customer: raw.customer };
+    }
+  } catch { /* corrupt storage */ }
+  return null;
 }
 
 /** Desktop tills park the cursor in the field; phones must not, or the
@@ -35,12 +50,17 @@ export default function App() {
 
   const catalog = useCatalog();
   const { items, meta, error, loading, stale, reload, byBarcode, searchByName } = catalog;
-  const { cart, totals, lastTouched, addProduct, setQty, removeLine, clearCart, reconcile } = useCart();
+  const {
+    cart, totals, lastTouched, addProduct, setQty, removeLine, clearCart, replaceAll, reconcile,
+  } = useCart();
 
   const [query, setQuery] = useState('');
   const [shown, setShown] = useState(IDLE);
   const [camOpen, setCamOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [quotesOpen, setQuotesOpen] = useState(false);
+  const [activeQuote, setActiveQuote] = useState(readActiveQuote);
   const [printDate, setPrintDate] = useState(null);
   const inputRef = useRef(null);
 
@@ -169,10 +189,61 @@ export default function App() {
   /* Stable identities: Dialog re-binds its close listener whenever these change. */
   const closeCamera = useCallback(() => { setCamOpen(false); refocus(); }, [refocus]);
   const closeCatalog = useCallback(() => { setCatalogOpen(false); refocus(); }, [refocus]);
+  const closeQuote = useCallback(() => { setQuoteOpen(false); refocus(); }, [refocus]);
+  const closeQuotes = useCallback(() => { setQuotesOpen(false); refocus(); }, [refocus]);
+
+  /* ------------------------------- quotes ------------------------------- */
+  useEffect(() => {
+    try {
+      if (activeQuote) localStorage.setItem(QUOTE_KEY, JSON.stringify(activeQuote));
+      else localStorage.removeItem(QUOTE_KEY);
+    } catch { /* storage full/disabled */ }
+  }, [activeQuote]);
+
+  const stopEditing = useCallback(() => setActiveQuote(null), []);
+
+  /**
+   * Create or update the quote from the current cart. An update whose quote
+   * was deleted on another device falls back to creating a fresh one rather
+   * than losing the customer's list.
+   */
+  const saveQuote = useCallback(async (customer, andPrint) => {
+    const items = cart.map((l) => ({
+      barcode: l.barcode, name: l.name, price: l.price, note: l.note, qty: l.qty,
+    }));
+    let saved;
+    if (activeQuote) {
+      try {
+        saved = await api.updateQuote(activeQuote.id, customer, items);
+      } catch (e) {
+        if (e && e.status === 404) saved = await api.createQuote(customer, items);
+        else throw e;
+      }
+    } else {
+      saved = await api.createQuote(customer, items);
+    }
+    setActiveQuote({ id: saved.id, number: saved.number, customer: saved.customer });
+    setQuoteOpen(false);
+    if (andPrint) setPrintDate(new Date().toLocaleString(t.locale));
+    else refocus();
+    return saved;
+  }, [cart, activeQuote, t.locale, refocus]);
+
+  /** Reopen a saved quote: its lines replace the on-screen list. */
+  const openQuote = useCallback((quote) => {
+    const replacing = cart.length > 0 && (!activeQuote || activeQuote.id !== quote.id);
+    if (replacing && !window.confirm(t.confirmLoadQuote)) return;
+    replaceAll(quote.items);
+    setActiveQuote({ id: quote.id, number: quote.number, customer: quote.customer });
+    setShown(IDLE);
+    setQuotesOpen(false);
+    refocus();
+  }, [cart.length, activeQuote, t.confirmLoadQuote, replaceAll, refocus]);
 
   const doClearCart = useCallback(() => {
     if (!cart.length || !window.confirm(t.confirmClear)) return;
     clearCart();
+    setActiveQuote(null);
     setShown(IDLE);
     inputRef.current?.focus();
   }, [cart.length, t.confirmClear, clearCart]);
@@ -274,6 +345,7 @@ export default function App() {
       onToggleSound={toggleSound}
       onToggleLang={toggleLang}
       onOpenCatalog={() => setCatalogOpen(true)}
+      onOpenQuotes={() => setQuotesOpen(true)}
     />
   );
 
@@ -319,18 +391,31 @@ export default function App() {
             cart={cart}
             totals={totals}
             lastTouched={lastTouched}
+            activeQuote={activeQuote}
             onSetQty={setQty}
             onRemove={removeLine}
             onPrint={doPrint}
             onClear={doClearCart}
+            onSaveQuote={() => setQuoteOpen(true)}
+            onStopEditing={stopEditing}
           />
           <TotalsDock t={t} totals={totals} />
         </section>
       </main>
 
-      {printDate !== null && <PrintSheet t={t} cart={cart} totals={totals} date={printDate} />}
+      {printDate !== null && (
+        <PrintSheet t={t} cart={cart} totals={totals} date={printDate} quote={activeQuote} />
+      )}
 
       <CameraDialog t={t} open={camOpen} onClose={closeCamera} onScan={onCameraScan} />
+      <QuoteDialog t={t} open={quoteOpen} onClose={closeQuote} activeQuote={activeQuote} onSave={saveQuote} />
+      <QuotesDialog
+        t={t}
+        open={quotesOpen}
+        onClose={closeQuotes}
+        activeQuoteId={activeQuote ? activeQuote.id : null}
+        onOpenQuote={openQuote}
+      />
       <CatalogDialog
         t={t}
         open={catalogOpen}
